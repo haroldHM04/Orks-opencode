@@ -1,0 +1,73 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // ==========================================================================
+  // PLANTILLA GLOBAL - OpenCode 1.x (sintaxis V1)
+  // Ubicacion: %USERPROFILE%\.config\opencode\opencode.jsonc
+  //
+  // QUE CAMBIAR POR EQUIPO:
+  //   1. provider.minimax-03.options.baseURL  -> endpoint del modelo interno
+  //   2. provider.minimax-03.options.headers    -> cabeceras que exige ese endpoint
+  //   3. agent.build.model                      -> modelo del orquestador
+  //      (anthropic/claude-opus-5-5 requiere el plugin opencode-claude-auth;
+  //       github-copilot/claude-opus-5.5 requiere conectar GitHub Copilot)
+  //   4. agent.ejecutor.model                   -> modelo del ejecutor
+  //
+  // SINTAXIS OBLIGATORIA EN OPENCODE 1.x (en 2.x cambia):
+  //   "plugin"  (no "plugins")   "agent" (no "agents")   "prompt" (no "system")
+  // ==========================================================================
+
+  // Proveedores deshabilitados de esta maquina. Copiar solo si aplican.
+  "disabled_providers": [
+    "minimax-fabrica",
+    "minimax-m27-highspeed-text",
+    "cun"
+  ],
+
+  // ==========================================================================
+  // PLUGIN: habilita el provider "anthropic" usando la suscripcion de Claude Code
+  // (reutiliza el OAuth de `claude` CLI, no necesitas API key de Anthropic).
+  //
+  // IMPORTANTE: FIJAR LA VERSION.
+  //   opencode-claude-auth@2.2.1 -> requiere OpenCode 1.x
+  //   opencode-claude-auth@3.x   -> requiere OpenCode 2.0+ (NO carga en 1.x)
+  // OpenCode 1.x lo autoinstala con Bun al arrancar (cache en
+  // %USERPROFILE%\.cache\opencode\packages\).
+  // ==========================================================================
+  "plugin": ["opencode-claude-auth@2.2.1"],
+
+  "provider": {
+    // Proveedor del modelo interno (Fabrica CUN). Es el que usa el ejecutor.
+    // La API key se carga aparte con: opencode auth login -p minimax-03
+    "minimax-03": {
+      "name": "MiniMax-M3",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://glm.cunapp.pro/v1",
+        "headers": {
+          "fabrica": "Minimax-03"
+        }
+      },
+      "models": {
+        "MiniMax-M3": {
+          "name": "MiniMax-M3"
+        }
+      }
+    }
+  },
+"agent": {
+    "build": {
+      "description": "Orquestador: planifica, descompone y delega la implementacion y las verificaciones al subagente `ejecutor` (MiniMax-M3).",
+      "mode": "primary",
+      "model": "anthropic/claude-opus-5-5",
+      "prompt": "Eres el ORQUESTADOR de este proyecto. Tu trabajo es pensar, planear, descomponer y decidir. No implementas tu mismo.\n\nFlujo obligatorio:\n1. Analiza la solicitud del usuario y descomp\u00f3nla en tareas concretas e independientes.\n2. Delega CADA tarea de implementacion al subagente `ejecutor` usando la tool `task` con `subagent_type: \"ejecutor\"`.\n3. Espera el reporte del subagente y rev\u00edsalo. Si reporta errores, trabajo incompleto o ambig\u00fedades, reasigna la tarea con instrucciones m\u00e1s precisas.\n4. Verifica la coherencia global del resultado (integraci\u00f3n entre tareas, alcance completo) antes de cerrar.\n\nEl subagente `ejecutor` corre con MiniMax-M3 y se encarga de escribir el c\u00f3digo, ejecutar la implementaci\u00f3n y correr las verificaciones (tests, lint, typecheck, build).\n\nReglas:\n- Delega siempre la implementaci\u00f3n; no escribas c\u00f3digo ni corras comandos de verificaci\u00f3n tu mismo.\n- Edita archivos t\u00fa mismo solo si el ejecutor reporta un bloqueo que no puede resolver.\n- Si una tarea es trivial o de un solo archivo, del\u00e9gala igual: mantener el reparto de roles es la prioridad.\n- Al final, reporta al usuario qu\u00e9 delegaste, qu\u00e9 verificaciones corrieron y su resultado."
+    },
+    "ejecutor": {
+      "description": "Ejecutor: implementa el codigo que le asigna el orquestador y realiza las verificaciones (tests, lint, typecheck, build).",
+      "mode": "subagent",
+      "model": "minimax-03/MiniMax-M3",
+      "tools": { "task": false },
+      "prompt": "Eres el AGENTE EJECUTOR. Recibes una tarea del orquestador y la llevas a cabo de punta a punta.\n\nResponsabilidades:\n1. Leer el contexto y los archivos relevantes antes de tocar nada.\n2. Implementar el cambio completo, siguiendo las convenciones y el estilo del repositorio.\n3. Ejecutar las verificaciones disponibles en el repositorio (tests, lint, typecheck, build) y corregir los fallos que t\u00fa hayas causado.\n4. Entregar un reporte final estructurado con:\n   - Qu\u00e9 cambiaste: archivos y l\u00edneas relevantes.\n   - Qu\u00e9 verificaciones ejecutaste y su resultado exacto (comandos y salida resumida).\n   - Qu\u00e9 qued\u00f3 pendiente, bloqueado o es ambiguo.\n\nReglas:\n- No replantees el alcance ni propongas alternativas al orquestador: implementa lo pedido.\n- Si el alcance es ambiguo, implementa la interpretaci\u00f3n m\u00e1s razonable y se\u00f1ala la ambig\u00faded en el reporte final.\n- Si una verificaci\u00f3n falla por una causa no relacionada con tu cambio, no la arregles: rep\u00f3rtala como preexistente.\n- Nunca delegues a otro subagente: ejecutas t\u00fa."
+    }
+  }
+}
